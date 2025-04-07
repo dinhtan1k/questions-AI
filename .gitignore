@@ -1,0 +1,55 @@
+# Ignore system files
+AppData/
+*.log
+.vscode/
+node_modules/
+.env
+# Ignore system directories and temporary files
+AppData/
+Documents/
+Local Settings/
+Cookies/
+Temp/
+*.bak
+*.swp
+# Ignore system directories and files
+**/AppData/
+**/Cookies/
+**/Documents/
+**/Downloads/
+**/Favorites/
+**/Links/
+**/Music/
+**/OneDrive/
+**/Pictures/
+**/Videos/
+
+# Ignore other unwanted files
+.DS_Store
+Thumbs.db
+# Ignore system directories and files
+**/AppData/
+**/Cookies/
+**/Documents/
+**/Downloads/
+**/Favorites/
+**/Links/
+**/Music/
+**/OneDrive/
+**/Pictures/
+**/Videos/
+**/Desktop/
+
+# Ignore common files
+.DS_Store
+Thumbs.db
+NTUSER.DAT*
+# Các thư mục hệ thống không cần thiết
+AppData/
+OneDrive/
+Pictures/
+Documents/
+Downloads/
+ntuser.dat.LOG1
+ntuser.dat.LOG2
+*.log

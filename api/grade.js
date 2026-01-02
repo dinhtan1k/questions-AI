@@ -93,7 +93,6 @@ export default async function handler(req, res) {
     ].join("\n");
 
     // 3) Gọi Gemini (batch 1 lần)
-  // 3) Gọi Gemini (batch 1 lần)
 const model = "gemini-2.5-flash";
 const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent`;
 

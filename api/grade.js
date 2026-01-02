@@ -113,7 +113,8 @@ const payload = {
   ],
   generationConfig: {
     temperature: 0.2,
-    maxOutputTokens: 2048
+    maxOutputTokens: 4096,              // ⬅ tăng token
+    responseMimeType: "application/json"// ⬅ ép trả JSON thuần
   }
 };
 

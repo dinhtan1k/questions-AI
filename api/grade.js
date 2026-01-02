@@ -93,17 +93,35 @@ export default async function handler(req, res) {
     ].join("\n");
 
     // 3) Gọi Gemini (batch 1 lần)
-    const model = "gemini-2.5-flash"; // ✅ model đang được docs dùng
+  // 3) Gọi Gemini (batch 1 lần)
+const model = "gemini-2.5-flash";
 const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent`;
+
+const payload = {
+  contents: [
+    {
+      role: "user",
+      parts: [
+        { text: system },
+        { text: "\n\nDỮ LIỆU:\n" + JSON.stringify({ submissions }) }
+      ]
+    }
+  ],
+  generationConfig: {
+    temperature: 0.2,
+    maxOutputTokens: 2048
+  }
+};
 
 const r = await fetch(url, {
   method: "POST",
   headers: {
     "Content-Type": "application/json",
-    "x-goog-api-key": process.env.GEMINI_API_KEY, // ✅ dùng header
+    "x-goog-api-key": process.env.GEMINI_API_KEY
   },
-  body: JSON.stringify(payload),
+  body: JSON.stringify(payload)
 });
+
 
 
     const raw = await r.text();

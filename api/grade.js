@@ -27,15 +27,26 @@ function setCors(req, res) {
   res.setHeader("Access-Control-Allow-Headers", "Content-Type");
 }
 
-function extractOutputText(openaiResponsesJson) {
-  // OpenAI Responses API: data.output[].content[] có type output_text
-  for (const item of openaiResponsesJson.output || []) {
-    if (item.type === "message") {
-      const part = (item.content || []).find(x => x.type === "output_text");
-      if (part?.text) return part.text;
-    }
+// Gemini hay trả về text (có thể kèm ```json ...```), ta bóc JSON ra chắc chắn
+function extractJsonFromText(text) {
+  if (!text) return "";
+  const t = text.trim();
+
+  // 1) Nếu có codefence ```json ... ```
+  const m1 = t.match(/```json\s*([\s\S]*?)\s*```/i);
+  if (m1?.[1]) return m1[1].trim();
+
+  const m2 = t.match(/```\s*([\s\S]*?)\s*```/);
+  if (m2?.[1]) return m2[1].trim();
+
+  // 2) Nếu text bắt đầu bằng { và kết thúc }
+  const first = t.indexOf("{");
+  const last = t.lastIndexOf("}");
+  if (first !== -1 && last !== -1 && last > first) {
+    return t.slice(first, last + 1).trim();
   }
-  return "";
+
+  return t;
 }
 
 export default async function handler(req, res) {
@@ -51,6 +62,14 @@ export default async function handler(req, res) {
       return res.status(400).json({ error: "Missing submissions" });
     }
 
+    // 0) Check env
+    if (!process.env.TURNSTILE_SECRET) {
+      return res.status(500).json({ error: "Missing env TURNSTILE_SECRET" });
+    }
+    if (!process.env.GEMINI_API_KEY) {
+      return res.status(500).json({ error: "Missing env GEMINI_API_KEY" });
+    }
+
     // 1) Verify Turnstile (1 lần cho cả batch)
     const ip = (req.headers["x-forwarded-for"] || "").split(",")[0].trim();
     const ts = await verifyTurnstile(process.env.TURNSTILE_SECRET, turnstileToken, ip);
@@ -63,63 +82,63 @@ export default async function handler(req, res) {
       "Bạn là giám khảo Toán THPT Việt Nam.",
       "Chấm phần LỜI GIẢI theo thang điểm tối đa = points của từng submission. KHÔNG chấm đáp số.",
       "Dựa vào: prompt (đề), solutionKey (lời giải chuẩn), rubric (các ý).",
-      "Trả về JSON đúng schema. Không viết thêm chữ ngoài JSON."
+      "YÊU CẦU: Chỉ trả về JSON THUẦN (không markdown, không ```).",
+      "Schema JSON bắt buộc:",
+      "{",
+      '  "results": [',
+      '    { "qid": number, "score": number, "feedback": string, "key_points_hit": string[] }',
+      "  ]",
+      "}",
+      "Không được thêm bất kỳ chữ nào ngoài JSON."
     ].join("\n");
 
-    const jsonSchema = {
-      name: "grade_batch_result",
-      schema: {
-        type: "object",
-        additionalProperties: false,
-        properties: {
-          results: {
-            type: "array",
-            items: {
-              type: "object",
-              additionalProperties: false,
-              properties: {
-                qid: { type: "number" },
-                score: { type: "number", minimum: 0 },
-                feedback: { type: "string" },
-                key_points_hit: { type: "array", items: { type: "string" } }
-              },
-              required: ["qid", "score", "feedback", "key_points_hit"]
-            }
-          }
-        },
-        required: ["results"]
+    // 3) Gọi Gemini (batch 1 lần)
+    // Bạn có thể đổi model: gemini-1.5-flash (nhanh/rẻ) hoặc gemini-1.5-pro (chất lượng hơn)
+    const model = "gemini-1.5-flash";
+    const url =
+      `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${process.env.GEMINI_API_KEY}`;
+
+    const payload = {
+      contents: [
+        {
+          role: "user",
+          parts: [
+            { text: system },
+            { text: "\n\nDỮ LIỆU:\n" + JSON.stringify({ submissions }) }
+          ]
+        }
+      ],
+      generationConfig: {
+        temperature: 0.2,
+        maxOutputTokens: 2048
       }
     };
 
-    // 3) Gọi OpenAI Responses API
-    const r = await fetch("https://api.openai.com/v1/responses", {
+    const r = await fetch(url, {
       method: "POST",
-      headers: {
-        "Authorization": `Bearer ${process.env.OPENAI_API_KEY}`,
-        "Content-Type": "application/json"
-      },
-      body: JSON.stringify({
-        model: "gpt-4o-mini",
-        input: [
-          { role: "system", content: system },
-          { role: "user", content: JSON.stringify({ submissions }) }
-        ],
-        text: { format: { type: "json_schema", json_schema: jsonSchema } }
-      })
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload)
     });
 
     const raw = await r.text();
     if (!r.ok) {
-      return res.status(502).json({ error: "OpenAI error", status: r.status, detail: raw });
+      return res.status(502).json({ error: "Gemini error", status: r.status, detail: raw });
     }
 
     const data = JSON.parse(raw);
-    const outText = extractOutputText(data);
-    if (!outText) {
-      return res.status(502).json({ error: "OpenAI returned no output_text", detail: data });
-    }
+    const text =
+      data.candidates?.[0]?.content?.parts?.map(p => p.text || "").join("") || "";
 
-    const result = JSON.parse(outText);
+    const jsonText = extractJsonFromText(text);
+    let result;
+    try {
+      result = JSON.parse(jsonText);
+    } catch (e) {
+      return res.status(502).json({
+        error: "Gemini returned non-JSON",
+        detail: { text, jsonText, parseError: e.message }
+      });
+    }
 
     // 4) Clamp score theo points
     const maxById = new Map(submissions.map(s => [Number(s.qid), Number(s.points)]));

@@ -93,32 +93,18 @@ export default async function handler(req, res) {
     ].join("\n");
 
     // 3) Gọi Gemini (batch 1 lần)
-    // Bạn có thể đổi model: gemini-1.5-flash (nhanh/rẻ) hoặc gemini-1.5-pro (chất lượng hơn)
-    const model = "gemini-1.5-flash";
-    const url =
-      `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${process.env.GEMINI_API_KEY}`;
+    const model = "gemini-2.5-flash"; // ✅ model đang được docs dùng
+const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent`;
 
-    const payload = {
-      contents: [
-        {
-          role: "user",
-          parts: [
-            { text: system },
-            { text: "\n\nDỮ LIỆU:\n" + JSON.stringify({ submissions }) }
-          ]
-        }
-      ],
-      generationConfig: {
-        temperature: 0.2,
-        maxOutputTokens: 2048
-      }
-    };
+const r = await fetch(url, {
+  method: "POST",
+  headers: {
+    "Content-Type": "application/json",
+    "x-goog-api-key": process.env.GEMINI_API_KEY, // ✅ dùng header
+  },
+  body: JSON.stringify(payload),
+});
 
-    const r = await fetch(url, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(payload)
-    });
 
     const raw = await r.text();
     if (!r.ok) {

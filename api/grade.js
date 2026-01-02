@@ -30,22 +30,27 @@ function setCors(req, res) {
 // Gemini hay trả về text (có thể kèm ```json ...```), ta bóc JSON ra chắc chắn
 function extractJsonFromText(text) {
   if (!text) return "";
-  const t = text.trim();
+  let t = String(text).trim();
 
-  // 1) Nếu có codefence ```json ... ```
-  const m1 = t.match(/```json\s*([\s\S]*?)\s*```/i);
-  if (m1?.[1]) return m1[1].trim();
+  // Loại BOM nếu có
+  t = t.replace(/^\uFEFF/, "");
 
-  const m2 = t.match(/```\s*([\s\S]*?)\s*```/);
-  if (m2?.[1]) return m2[1].trim();
+  // Nếu có ```json ... ```
+  const mJson = t.match(/```json\s*([\s\S]*?)\s*```/i);
+  if (mJson?.[1]) return mJson[1].trim();
 
-  // 2) Nếu text bắt đầu bằng { và kết thúc }
+  // Nếu có ``` ... ```
+  const mAny = t.match(/```\s*([\s\S]*?)\s*```/);
+  if (mAny?.[1]) return mAny[1].trim();
+
+  // Cắt từ dấu { đầu tiên tới dấu } cuối cùng
   const first = t.indexOf("{");
   const last = t.lastIndexOf("}");
   if (first !== -1 && last !== -1 && last > first) {
     return t.slice(first, last + 1).trim();
   }
 
+  // fallback
   return t;
 }
 
